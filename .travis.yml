@@ -1,0 +1,7 @@
+language: c
+sudo: false
+install:
+        - chmod a+x git-sup
+        - chmod a+x run_tests.sh
+script:
+        - ./run_tests.sh
