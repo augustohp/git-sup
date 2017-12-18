@@ -4,7 +4,7 @@ Have a directory with multiple Git repositories and want easily retrieve updates
 from different remotes? Ask git "Whats up!?"
 
 	$ cd ~/src/github.com/Respect
-	$ git sup .
+	$ git sup fetch .
 	/Users/apascutti/src/github.com/Respect/Rest
 		Fetching origin
 		c0c7022..a37067a  master     -> origin/master

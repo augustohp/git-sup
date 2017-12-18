@@ -1,8 +1,50 @@
 #!/usr/bin/env sh
 
+set -e
+set +o posix
+
+# Dispatching "copied" from [scrito](https://gist.github.com/alganet/9419469)
+gitsup () ( - )
+
+# Usage: _sup_error "Some warning"
+_sup_error () { echo "Error: $@" 1>&2; exit 2; }
+
+# Usage: _sup_exists <command>
+# Output:
+#   - none if the function name does not exists
+#   - the function name if it exists
+_sup_exists () { declare -f $1 > /dev/null && echo $1 || echo ""; }
+
+# Making minimum options available
+gitsup_v () ( gitsup_version )
+gitsup_version () ( echo "git-sup 1.0.0" 1>&2 )
+
+gitsup_h () ( gitsup_help )
+gitsup_help ()
+{
+	cat <<-HELP
+	Usage: git-sup [options] <command> [command-options]
+	       git sup changelog .
+	       git sup changelog --help
+	
+	Allows one to query Git repositories about relevant information
+	regarding their repositories.
+
+	Options:
+	  -v, --version  Displays the version of the tool.
+	  -h, --help     Renders this message.
+	
+	Commands:
+	  fetch <path>   Fetches updates from all remotes.
+
+	Issues can be reported to augusto.hp [at] gmail [dot] com
+	HELP
+}
+
+GITSUP_CONFIG_SECTION=sup
 gitsup_config ()
 {
-	echo $(git config --get-all ${1:-})
+	echo $(git config --get-all ${1:-GITSUP_CONFIG_SECTION} 2>/dev/null)
 }
 
 gitsup_fetch_args ()
@@ -25,18 +67,54 @@ gitsup_ignored_remotes ()
 	echo $ignore_chain
 }
 
-gitsup_paths ()
+GITSUP_REPOSITORIES_DEPTH=2
+gitsup_repositories ()
 {
-	directory="${1:-}"
-	depth=2
+	local directory="${1:-}"
+	local depth=$GITSUP_REPOSITORIES_DEPTH
+	directory=${directory%%/}
 
-	find "${directory}" -name .git -depth ${depth} 2>/dev/null | sort
+	if [ -d "${directory}/.git" ]
+	then
+		echo "${directory}"
+		return 0
+	fi
+
+	for repo in $(find "${directory}" -name .git -depth ${depth} | sed 's#/\.git$##')
+	do
+		realpath "${repo}"
+	done
 }
 
-for path in $(gitsup_paths ${1:-})
-do
-	cd "${path}/.."
-	pwd
-	git fetch $(gitsup_fetch_args) $(gitsup_ignored_remotes) | sed "s/^/    /"
-	cd - 2>&1 > /dev/null
-done
+gitsup_fetch ()
+{
+	for path in $(gitsup_repositories ${1:-})
+	do
+		cd "${path}"
+		pwd
+		git fetch $(gitsup_fetch_args) $(gitsup_ignored_remotes) | sed "s/^/    /"
+		cd - 2>&1 > /dev/null
+	done
+}
+
+if [ ! -z $GITSUP_TEST_EXECUTION ]
+then
+	return 0
+fi
+
+tool=$1
+tool=${tool##*-}
+tool=${tool##*/}
+if [ -z "${tool}" ]
+then
+	_sup_error "Specify a command. Use 'git-sup --help'."
+fi
+
+shift
+main_command_exists=$(_sup_exists gitsup_${tool})
+if [ -z "$main_command_exists" ]
+then
+	_sup_error "Invalid command 'git sup ${tool}'. Use 'git-sup --help'."
+fi
+
+gitsup_${tool} $@
