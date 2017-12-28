@@ -2,18 +2,91 @@
 
 set -e
 set +o posix
+test "${DEBUG:-0}" != "0" && set -x || set +x;
+
+# Option flags and their default values
+GITSUP_REPOSITORIES_DEPTH=2
+GITSUP_CONFIG_SECTION=sup
+
+# Usage: _error "Some warning"
+_error () { echo "Error: $@" 1>&2; exit 2; }
+
+# Usage: _tab <command 1> [command 2] ...
+_tab () { $@ | sed "s/^/	/"; }
+
+# Usage: _verbose "A message thay may not appear"
+_verbose () { test "${VERBOSE:-0}" != "0" && return || echo $@; }
+
+# Usage: _git [valid git command]
+_git () { _verbose git $@; git $@; }
+
+# Usage: _function_exists <name>
+_function_exists () { declare -f $1 > /dev/null && echo $1 || echo ""; }
+
+# Usage: _help <argument> <display help command to execute>
+_help ()
+{
+	if [ "$1" == "--help" -o "$1" == "-h" ]
+	then
+		${@:2}
+		exit 0
+	else
+		return 0
+	fi
+}
+
+# Usage: _find_repositories <path> [depth]
+_find_repositories ()
+{
+	local directory="${1:-}"
+	local depth=${2:-$GITSUP_REPOSITORIES_DEPTH}
+	directory=${directory%%/}
+
+	if [ -d "${directory}/.git" ]
+	then
+		echo "${directory}"
+		return 0
+	fi
+
+	for repo in $(find "${directory}" -name .git -depth ${depth} | sed 's#/\.git$##')
+	do
+		realpath "${repo}"
+	done
+}
+
+# Usage: _repeat_commands_for_repositories <path> <command 1> [command 2] ...
+_repeat_commands_for_repositories ()
+{
+	local path
+	local cmd
+	path=$1
+	cmd=${@:2}
+
+	for dir in $(_find_repositories $path)
+	do
+		_verbose "Stacking directory ${dir}"
+		pushd "${dir}" > /dev/null
+		$cmd
+		popd > /dev/null
+	done
+}
+
+# Usage: _conf_or <git config key> <default value if none is given>
+_conf_or ()
+{
+	local output
+
+	output=$(git config --get-all ${1:-GITSUP_CONFIG_SECTION} 2>/dev/null)
+	if [ -z "${output}" ]
+	then
+		echo ${@:2} # everything but the first argument
+	else
+		echo ${output}
+	fi
+}
 
 # Dispatching "copied" from [scrito](https://gist.github.com/alganet/9419469)
 gitsup () ( - )
-
-# Usage: _sup_error "Some warning"
-_sup_error () { echo "Error: $@" 1>&2; exit 2; }
-
-# Usage: _sup_exists <command>
-# Output:
-#   - none if the function name does not exists
-#   - the function name if it exists
-_sup_exists () { declare -f $1 > /dev/null && echo $1 || echo ""; }
 
 # Making minimum options available
 gitsup_v () ( gitsup_version )
@@ -24,8 +97,8 @@ gitsup_help ()
 {
 	cat <<-HELP
 	Usage: git-sup [options] <command> [command-options]
-	       git sup changelog .
-	       git sup changelog --help
+	       git sup fetch .
+	       git sup fetch --help
 	
 	Allows one to query Git repositories about relevant information
 	regarding their repositories.
@@ -41,61 +114,23 @@ gitsup_help ()
 	HELP
 }
 
-GITSUP_CONFIG_SECTION=sup
-gitsup_config ()
-{
-	echo $(git config --get-all ${1:-GITSUP_CONFIG_SECTION} 2>/dev/null)
-}
-
-gitsup_fetch_args ()
-{
-	default_args="--all"
-	user_args=$(gitsup_config sup.fetchargs)
-
-	echo ${user_args:-${default_args}}
-}
-
-gitsup_ignored_remotes ()
-{
-	ignore_list=$(gitsup_config sup.ignoreremote)
-	ignore_chain=""
-	for remote in $ignore_list
-	do
-		ignore_chain="${ignore_chain} | grep -v ${remote}"
-	done
-
-	echo $ignore_chain
-}
-
-GITSUP_REPOSITORIES_DEPTH=2
-gitsup_repositories ()
-{
-	local directory="${1:-}"
-	local depth=$GITSUP_REPOSITORIES_DEPTH
-	directory=${directory%%/}
-
-	if [ -d "${directory}/.git" ]
-	then
-		echo "${directory}"
-		return 0
-	fi
-
-	for repo in $(find "${directory}" -name .git -depth ${depth} | sed 's#/\.git$##')
-	do
-		realpath "${repo}"
-	done
-}
-
 gitsup_fetch ()
 {
-	for path in $(gitsup_repositories ${1:-})
-	do
-		cd "${path}"
-		pwd
-		git fetch $(gitsup_fetch_args) $(gitsup_ignored_remotes) | sed "s/^/    /"
-		cd - 2>&1 > /dev/null
-	done
+	local cwd # current working directory
+	cwd=${1:-.}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup fetch <path>
+
+	Will find every git repository in PATH and execute a "git fetch"
+	command in then.
+	HELP
+
+	_repeat_commands_for_repositories "${cwd}" \
+		echo $(pwd); \
+		_tab _git fetch $(_conf_or sup.fetchargs "--all")
 }
+
 
 if [ ! -z $GITSUP_TEST_EXECUTION ]
 then
@@ -107,14 +142,14 @@ tool=${tool##*-}
 tool=${tool##*/}
 if [ -z "${tool}" ]
 then
-	_sup_error "Specify a command. Use 'git-sup --help'."
+	_error "Specify a command. Use 'git-sup --help'."
 fi
 
 shift
-main_command_exists=$(_sup_exists gitsup_${tool})
+main_command_exists=$(_function_exists gitsup_${tool})
 if [ -z "$main_command_exists" ]
 then
-	_sup_error "Invalid command 'git sup ${tool}'. Use 'git-sup --help'."
+	_error "Invalid command 'git sup ${tool}'. Use 'git-sup --help'."
 fi
 
 gitsup_${tool} $@

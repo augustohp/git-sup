@@ -38,8 +38,6 @@ You can use `.git/config` or `~/.gitconfig` to configure `git-sup`:
 
 	[sup]
 		fetchargs = --prune
-		ignoreremote = pull_requests
-		ignoreremote = live
 
 Git configuration is respected. If you have a global configuration it is used
 when no local configuration is found. If you have an specific configuration for
