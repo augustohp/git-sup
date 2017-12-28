@@ -18,7 +18,7 @@ _tab () { $@ | sed "s/^/	/"; }
 _verbose () { test "${VERBOSE:-0}" != "0" && return || echo $@; }
 
 # Usage: _git [valid git command]
-_git () { _verbose git $@; git $@; }
+_git () { _verbose git $@; git $@ 2> /dev/null; }
 
 # Usage: _function_exists <name>
 _function_exists () { declare -f $1 > /dev/null && echo $1 || echo ""; }
@@ -108,7 +108,8 @@ gitsup_help ()
 	  -h, --help     Renders this message.
 	
 	Commands:
-	  fetch <path>   Fetches updates from all remotes.
+	  fetch          Fetches updates from all remotes.
+	  authors        Lists authors and commiters.
 
 	Issues can be reported to augusto.hp [at] gmail [dot] com
 	HELP
@@ -131,6 +132,36 @@ gitsup_fetch ()
 		_tab _git fetch $(_conf_or sup.fetchargs "--all")
 }
 
+gitsup_authors ()
+{
+	local cwd # where to execute the command into
+	local log_args # git-log arguments supplied
+	cwd=${1:-.}
+	log_args=${@:2}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup authors <path> [options]
+	       git-sup authors ~/src/github.com/php/php-src
+
+	Will output every author or commiter and their e-mail (respecting
+	.mailmap file) for every Git repository found in PATH.
+
+	An output line separated by tab contain the columns:
+	  E-mail: Author or commiter e-mail's on Git
+	  Name: Author or commiter name's on Git
+	
+	Options:
+	  -N              Display only N commits.
+	  --since <when>  Only commits after WHEN, e.g: 2 weeks ago.
+	  --follow <file> Continues to look the file history through its
+                      renames.
+		
+	Any OPTIONS accepted by git-log also works.
+	HELP
+
+	_repeat_commands_for_repositories "${cwd}" \
+		_git log --format='%aE%x09%aN%n%cE%x09%cN' ${log_args} | sort | uniq
+}
 
 if [ ! -z $GITSUP_TEST_EXECUTION ]
 then
