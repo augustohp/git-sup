@@ -7,6 +7,7 @@ test "${DEBUG:-0}" != "0" && set -x || set +x;
 # Option flags and their default values
 GITSUP_REPOSITORIES_DEPTH=2
 GITSUP_CONFIG_SECTION=sup
+GITSUP_DAYS_TO_BE_ACTIVE=${GITSUP_DAYS_TO_BE_ACTIVE:=30}
 
 # Usage: _error "Some warning"
 _error () { echo "Error: $@" 1>&2; exit 2; }
@@ -15,10 +16,7 @@ _error () { echo "Error: $@" 1>&2; exit 2; }
 _tab () { $@ | sed "s/^/	/"; }
 
 # Usage: _verbose "A message thay may not appear"
-_verbose () { test "${VERBOSE:-0}" != "0" && return || echo $@; }
-
-# Usage: _git [valid git command]
-_git () { _verbose git $@; git $@ 2> /dev/null; }
+_verbose () { test "${VERBOSE:-0}" != "0" && return 0 || echo $@; }
 
 # Usage: _function_exists <name>
 _function_exists () { declare -f $1 > /dev/null && echo $1 || echo ""; }
@@ -51,23 +49,6 @@ _find_repositories ()
 	for repo in $(find "${directory}" -name .git -depth ${depth} | sed 's#/\.git$##')
 	do
 		realpath "${repo}"
-	done
-}
-
-# Usage: _repeat_commands_for_repositories <path> <command 1> [command 2] ...
-_repeat_commands_for_repositories ()
-{
-	local path
-	local cmd
-	path=$1
-	cmd=${@:2}
-
-	for dir in $(_find_repositories $path)
-	do
-		_verbose "Stacking directory ${dir}"
-		pushd "${dir}" > /dev/null
-		$cmd
-		popd > /dev/null
 	done
 }
 
@@ -127,9 +108,13 @@ gitsup_fetch ()
 	command in then.
 	HELP
 
-	_repeat_commands_for_repositories "${cwd}" \
-		echo $(pwd); \
-		_tab _git fetch $(_conf_or sup.fetchargs "--all")
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Stacking directory ${dir}"
+		pushd "${dir}" > /dev/null
+		_tab git fetch $(_conf_or sup.fetchargs "--all") 2> /dev/null
+		popd > /dev/null
+	done
 }
 
 gitsup_authors ()
@@ -159,8 +144,42 @@ gitsup_authors ()
 	Any OPTIONS accepted by git-log also works.
 	HELP
 
-	_repeat_commands_for_repositories "${cwd}" \
-		_git log --format='%aE%x09%aN%n%cE%x09%cN' ${log_args} | sort | uniq
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Stacking directory ${dir}"
+		pushd "${dir}" > /dev/null
+		git log --format='%aE%x09%aN%n%cE%x09%cN' ${log_args} 2> /dev/null | sort | uniq
+		popd > /dev/null
+	done
+}
+
+gitsup_authors_active ()
+{
+	local cwd # where to execute the command into
+	local log_args # git-log arguments supplied
+	cwd=${1:-.}
+	log_args=${@:2}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup authors_active <path> [options]
+	       git-sup authors_active ~/src/github.com/php/php-src
+
+	Will output every author or commiter and their e-mail (respecting
+	.mailmap file) for every Git repository found in PATH. Only commits
+	of the last 30 days are analysed.
+
+	An output line separated by tab contain the columns:
+	  E-mail: Author or commiter e-mail's on Git
+	  Name: Author or commiter name's on Git
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Stacking directory ${dir}"
+		pushd "${dir}" > /dev/null
+		git log --format='%aE%x09%aN%n%cE%x09%cN' --since "${GITSUP_DAYS_TO_BE_ACTIVE} days ago" 2> /dev/null | sort | uniq
+		popd > /dev/null
+	done
 }
 
 if [ ! -z $GITSUP_TEST_EXECUTION ]
