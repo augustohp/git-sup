@@ -91,6 +91,8 @@ gitsup_help ()
 	Commands:
 	  fetch          Fetches updates from all remotes.
 	  authors        Lists authors and commiters.
+	  authors_active Authors who commited in a given time.
+	  changelog      Display short commit messages.
 
 	Issues can be reported to augusto.hp [at] gmail [dot] com
 	HELP
@@ -113,6 +115,53 @@ gitsup_fetch ()
 		_verbose "Stacking directory ${dir}"
 		pushd "${dir}" > /dev/null
 		_tab git fetch $(_conf_or sup.fetchargs "--all") 2> /dev/null
+		popd > /dev/null
+	done
+}
+
+gitsup_master_update ()
+{
+	local cwd # current working directory
+	cwd=${1:-.}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup pull <path>
+
+	Stashes existing changes, fetches from origin remote, changes branch
+	to master, (hard) resets to origin/master and goes back to previous branch.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Stacking directory ${dir}"
+		pushd "${dir}" > /dev/null
+		_tab git fetch $(_conf_or sup.fetchargs "--all") 2> /dev/null
+		popd > /dev/null
+	done
+}
+
+gitsup_changelog ()
+{
+	local cwd # current working directory
+	local branch
+	cwd=${1:-.}
+	branch=${2:-"master"}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup changelog <path> [branch]
+
+	Will output the short commit message of every Git repository found
+	inside PATH for the last $GITSUP_DAYS_TO_BE_ACTIVE days.  Defaults to master branch.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Stacking directory ${dir}"
+		pushd "${dir}" > /dev/null
+		echo $dir
+		git checkout ${branch} > /dev/null 2> /dev/null
+		_tab git log --no-merges --oneline --since "$GITSUP_DAYS_TO_BE_ACTIVE days ago" 2> /dev/null
+		git checkout - 2> /dev/null > /dev/null
 		popd > /dev/null
 	done
 }
@@ -166,7 +215,7 @@ gitsup_authors_active ()
 
 	Will output every author or commiter and their e-mail (respecting
 	.mailmap file) for every Git repository found in PATH. Only commits
-	of the last 30 days are analysed.
+	of the last $GITSUP_DAYS_TO_BE_ACTIVE days are analysed.
 
 	An output line separated by tab contain the columns:
 	  E-mail: Author or commiter e-mail's on Git
