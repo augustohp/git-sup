@@ -16,7 +16,7 @@ _error () { echo "Error: $@" 1>&2; exit 2; }
 _tab () { $@ | sed "s/^/	/"; }
 
 # Usage: _verbose "A message thay may not appear"
-_verbose () { test "${VERBOSE:-0}" != "0" && return 0 || echo $@; }
+_verbose () { test -z "${VERBOSE:-""}" && return 0 || echo $@; }
 
 # Usage: _function_exists <name>
 _function_exists () { declare -f $1 > /dev/null && echo $1 || echo ""; }
@@ -46,7 +46,7 @@ _find_repositories ()
 		return 0
 	fi
 
-	for repo in $(find "${directory}" -name .git -depth ${depth} | sed 's#/\.git$##')
+	for repo in $(find "${directory}" -name .git -depth ${depth} 2> /dev/null | sed 's#/\.git$##')
 	do
 		realpath "${repo}"
 	done
@@ -93,6 +93,8 @@ gitsup_help ()
 	  authors        Lists authors and commiters.
 	  authors_active Authors who commited in a given time.
 	  changelog      Display short commit messages.
+	  uncommited     List repositories with pending changes.
+	  now            Updates repositories to origin/master.
 
 	Issues can be reported to augusto.hp [at] gmail [dot] com
 	HELP
@@ -112,20 +114,48 @@ gitsup_fetch ()
 
 	for dir in $(_find_repositories $cwd)
 	do
-		_verbose "Stacking directory ${dir}"
+		_verbose "Repository ${dir}"
 		pushd "${dir}" > /dev/null
 		_tab git fetch $(_conf_or sup.fetchargs "--all") 2> /dev/null
 		popd > /dev/null
 	done
 }
 
-gitsup_master_update ()
+gitsup_uncommited ()
 {
 	local cwd # current working directory
 	cwd=${1:-.}
 
 	_help "${cwd}" cat <<-HELP
-	Usage: git-sup pull <path>
+	Usage: git-sup uncommited <path>
+
+	Displays the directory names of repositories with pending changes to
+	be commited.
+	Defaults to look just into the current branch of the repository.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Repository ${dir}"
+		pushd "${dir}" > /dev/null
+		if [ ! -z "$(git diff HEAD --name-only  2>/dev/null 2>&1)" ]
+		then
+			echo $dir
+		fi
+		popd > /dev/null
+	done
+}
+
+# TODO Use _conf_or
+gitsup_now ()
+{
+	local cwd # current working directory
+	local gitref
+	cwd=${1:-.}
+	gitref="origin/master"
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup now <path>
 
 	Stashes existing changes, fetches from origin remote, changes branch
 	to master, (hard) resets to origin/master and goes back to previous branch.
@@ -133,9 +163,16 @@ gitsup_master_update ()
 
 	for dir in $(_find_repositories $cwd)
 	do
-		_verbose "Stacking directory ${dir}"
+		_verbose "Repository ${dir}"
 		pushd "${dir}" > /dev/null
-		_tab git fetch $(_conf_or sup.fetchargs "--all") 2> /dev/null
+		if [ -z "$(gitsup_uncommited)" ]
+		then
+			git add .
+			git stash save "git-sup update auto-stashed changes"
+			_tab _verbose "Stash created"
+		fi
+		gitsup_fetch
+		git reset --hard $gitref 2>&1 > /dev/null
 		popd > /dev/null
 	done
 }
@@ -144,6 +181,7 @@ gitsup_changelog ()
 {
 	local cwd # current working directory
 	local branch
+	local changes
 	cwd=${1:-.}
 	branch=${2:-"master"}
 
@@ -156,11 +194,15 @@ gitsup_changelog ()
 
 	for dir in $(_find_repositories $cwd)
 	do
-		_verbose "Stacking directory ${dir}"
+		_verbose "Repository ${dir}"
 		pushd "${dir}" > /dev/null
-		echo $dir
 		git checkout ${branch} > /dev/null 2> /dev/null
-		_tab git log --no-merges --oneline --since "$GITSUP_DAYS_TO_BE_ACTIVE days ago" 2> /dev/null
+		changes=$(git log --no-merges --oneline --since "$GITSUP_DAYS_TO_BE_ACTIVE days ago" 2> /dev/null)
+		if [ ! -z "$changes" ]
+		then
+			echo $dir
+			git log --no-merges --oneline --since "$GITSUP_DAYS_TO_BE_ACTIVE days ago" 2> /dev/null
+		fi
 		git checkout - 2> /dev/null > /dev/null
 		popd > /dev/null
 	done
@@ -195,7 +237,7 @@ gitsup_authors ()
 
 	for dir in $(_find_repositories $cwd)
 	do
-		_verbose "Stacking directory ${dir}"
+		_verbose "Repository ${dir}"
 		pushd "${dir}" > /dev/null
 		git log --format='%aE%x09%aN%n%cE%x09%cN' ${log_args} 2> /dev/null | sort | uniq
 		popd > /dev/null
@@ -224,7 +266,7 @@ gitsup_authors_active ()
 
 	for dir in $(_find_repositories $cwd)
 	do
-		_verbose "Stacking directory ${dir}"
+		_verbose "Repository ${dir}"
 		pushd "${dir}" > /dev/null
 		git log --format='%aE%x09%aN%n%cE%x09%cN' --since "${GITSUP_DAYS_TO_BE_ACTIVE} days ago" 2> /dev/null | sort | uniq
 		popd > /dev/null
