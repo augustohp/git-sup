@@ -8,6 +8,7 @@ test "${DEBUG:-0}" != "0" && set -x || set +x;
 GITSUP_REPOSITORIES_DEPTH=2
 GITSUP_CONFIG_SECTION=sup
 GITSUP_DAYS_TO_BE_ACTIVE=${GITSUP_DAYS_TO_BE_ACTIVE:=30}
+GITSUP_LOG_FORMAT_AUTHORS=${GITSUP_LOG_FORMAT_AUTHORS:='%aN%x09<%aE>'}
 
 # Usage: _error "Some warning"
 _error () { echo "Error: $@" 1>&2; exit 2; }
@@ -231,6 +232,10 @@ gitsup_authors ()
 	  --since <when>  Only commits after WHEN, e.g: 2 weeks ago.
 	  --follow <file> Continues to look the file history through its
                       renames.
+	
+	Environment variables:
+	  GITSUP_LOG_FORMAT_AUTHORS=${GITSUP_LOG_FORMAT_AUTHORS}
+
 		
 	Any OPTIONS accepted by git-log also works.
 	HELP
@@ -239,7 +244,7 @@ gitsup_authors ()
 	do
 		_verbose "Repository ${dir}"
 		pushd "${dir}" > /dev/null
-		git log --format='%aE%x09%aN%n%cE%x09%cN' ${log_args} 2> /dev/null | sort | uniq
+		git log --format="$GITSUP_LOG_FORMAT_AUTHORS" ${log_args} 2> /dev/null | sort | uniq
 		popd > /dev/null
 	done
 }
@@ -258,17 +263,18 @@ gitsup_authors_active ()
 	Will output every author or commiter and their e-mail (respecting
 	.mailmap file) for every Git repository found in PATH. Only commits
 	of the last $GITSUP_DAYS_TO_BE_ACTIVE days are analysed.
+	
+	Environment variables:
+	  GITSUP_LOG_FORMAT_AUTHORS=${GITSUP_LOG_FORMAT_AUTHORS}
+	  GITSUP_DAYS_TO_BE_ACTIVE=${GITSUP_DAYS_TO_BE_ACTIVE}
 
-	An output line separated by tab contain the columns:
-	  E-mail: Author or commiter e-mail's on Git
-	  Name: Author or commiter name's on Git
 	HELP
 
 	for dir in $(_find_repositories $cwd)
 	do
 		_verbose "Repository ${dir}"
 		pushd "${dir}" > /dev/null
-		git log --format='%aE%x09%aN%n%cE%x09%cN' --since "${GITSUP_DAYS_TO_BE_ACTIVE} days ago" 2> /dev/null | sort | uniq
+		git log --format=${GITSUP_LOG_FORMAT_AUTHORS} --since "${GITSUP_DAYS_TO_BE_ACTIVE} days ago" 2> /dev/null | sort | uniq
 		popd > /dev/null
 	done
 }
