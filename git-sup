@@ -1,7 +1,7 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 set -e
-set +o posix
+set -o posix
 test "${DEBUG:-0}" != "0" && set -x || set +x;
 
 # Option flags and their default values
@@ -20,7 +20,7 @@ _tab () { $@ | sed "s/^/	/"; }
 _verbose () { test -z "${VERBOSE:-""}" && return 0 || echo $@; }
 
 # Usage: _function_exists <name>
-_function_exists () { declare -f $1 > /dev/null && echo $1 || echo ""; }
+_function_exists () { command -V "$1" 2> /dev/null | grep "function" || echo ""; }
 
 # Usage: _help <argument> <display help command to execute>
 _help ()
@@ -47,7 +47,7 @@ _find_repositories ()
 		return 0
 	fi
 
-	for repo in $(find "${directory}" -name .git -depth ${depth} 2> /dev/null | sed 's#/\.git$##')
+	for repo in $(find "${directory}" -name .git -type d -maxdepth ${depth} 2> /dev/null | sed 's#/\.git$##')
 	do
 		realpath "${repo}"
 	done
