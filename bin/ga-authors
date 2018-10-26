@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# vim: ft=sh:
+
+git log --pretty="%ae"

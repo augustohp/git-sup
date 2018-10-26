@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# vim: ft=sh:
+
+git log --pretty="%ae,%ci,%cd" --date="format:%Y-%m-01"

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#vim: ft=sh noet:
+
+APP_NAME=$(basename $0)
+APP_VERSION="1.0.0"
+OPTION_HOWLONG="6 month ago"
+
+command_help()
+{
+	cat <<-EOT
+	Usage: $APP_NAME
+	       $APP_NAME [-v | --version]
+	       $APP_NAME [-h | --help]
+	       $APP_NAME [-s <d> | --since <d>]
+	
+	Will print the amount of commits and a repository name, for a given period of
+	time.
+
+	Options
+	  -s <d>     Considers repository to be inactive if there are no commits
+	             since that period (Default: $OPTION_HOWLONG).
+
+	Send bugs or suggestions to augusto.hp@gmail.com
+	EOT
+}
+
+test ! -z "$DEBUG" && { set -x; }
+
+while :;
+do
+	if [ $# = 0 ]
+	then
+		break
+	fi
+
+	case $1 in
+		-h|--help)
+			command_help
+			exit 0
+			;;
+		-s|--since)
+			OPTION_HOWLONG="$2"
+			shift
+			;;
+		-v|--version)
+			echo "$APP_NAME $APP_VERSION"
+			exit 0
+			;;
+		--)
+			break
+			;;
+	esac
+	shift
+done
+
+for git_path in $(git-repositories)
+do
+	repository="${git_path%%/.git}"
+	pushd "$repository" > /dev/null
+	commits=$(git log --since "$OPTION_HOWLONG" --oneline | wc -l)
+	echo "$commits	$repository"
+	popd > /dev/null
+done

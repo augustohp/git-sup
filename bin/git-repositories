@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+#vim: ft=sh noet:
+
+for repository in $(find . -name .git -type d)
+do
+	repository=${repository%%\/.git}
+	echo $repository
+done

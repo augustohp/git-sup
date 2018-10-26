@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#vim: ft=sh noet:
+
+APP_NAME=$(basename $0)
+APP_VERSION="1.0.0"
+OPTION_HOWLONG="6 month ago"
+
+command_help()
+{
+	cat <<-EOT
+	Usage: $APP_NAME
+	       $APP_NAME [-v | --version]
+	       $APP_NAME [-h | --help]
+	       $APP_NAME [-s <d> | --since <d>]
+	
+	Will print the percentage of commits that are not merge commits.
+
+	Options
+	  -s <d>     Considers repository to be inactive if there are no commits
+	             since that period (Default: $OPTION_HOWLONG).
+
+	Send bugs or suggestions to augusto.hp@gmail.com
+	EOT
+}
+
+test ! -z "$DEBUG" && { set -x; }
+
+while :;
+do
+	if [ $# = 0 ]
+	then
+		break
+	fi
+
+	case $1 in
+		-h|--help)
+			command_help
+			exit 0
+			;;
+		-s|--since)
+			OPTION_HOWLONG="$2"
+			shift
+			;;
+		-v|--version)
+			echo "$APP_NAME $APP_VERSION"
+			exit 0
+			;;
+		--)
+			break
+			;;
+	esac
+	shift
+done
+
+for repository in $(git-repositories)
+do 
+    pushd "$repository" > /dev/null
+    commits=$(git log --oneline --since "$OPTION_HOWLONG" | wc -l)
+    commits_wo_merges=$(git log --oneline --since "$OPTION_HOWLONG" --no-merges | wc -l)
+	if [ $commits -eq 0 ]
+	then
+		popd > /dev/null
+		continue
+	fi
+    a=$(($commits_wo_merges * 100))
+    real_commits_percentage=$(($a/$commits))
+    echo "$real_commits_percentage	$repository"
+    popd > /dev/null
+done

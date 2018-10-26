@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# vim: ft=sh:
+
+git log --reverse --pretty="%ci" | head -n 1

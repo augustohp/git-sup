@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# vim: ft=sh:
+
+set -e
+
+REPORT_DIR=$HOME/WIP/xploration
+REPORT_COMMITS=$REPORT_DIR/commits.csv
+
+if [ -z "$GIT_REPORT_WORKDIR" ]
+then
+	echo "Missing GIT_REPORT_WORKDIR with all repositories" >&2
+	exit 1
+fi
+
+if [ ! -d "$GIT_REPORT_WORKDIR" ]
+then
+	echo "GIT_REPORT_WORKDIR is not a directory" >&2
+	exit 1
+fi
+
+rm -f $REPORT_COMMITS
+
+pushd "$GIT_REPORT_WORKDIR" > /dev/null
+echo "repository,age,first commit date,last_commit_date,number of authors,author with most commits, author with most commits in the last 3 months"
+for repository in $(ls)
+do
+	pushd "$repository" > /dev/null
+	age=$(ga-age)
+	first_commit=$(ga-birthday)
+	last_commit=$(ga-last_commit_date)
+	authors=$(ga-authors | sort | uniq | wc -l)
+	mvp_author=$(ga-authors | sort | uniq -c | sort -nr | head -n 1 | awk '{print $2}')
+	mvp_author_quarter=$(git log --pretty="%ae" --since "3 months ago" | sort | uniq -c | sort -nr | head -n 1 | awk '{print $2}')
+	echo "$repository,$age,$first_commit,$last_commit,$authors,$mvp_author,$mvp_author_quarter"
+	ga-commit-csv > "$REPORT_DIR/${repository}_commits-authored.csv"
+	ga-commit-csv >> "$REPORT_COMMITS"
+	popd > /dev/null
+done
+popd > /dev/null
