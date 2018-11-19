@@ -3,8 +3,10 @@
 workshop_repository="https://github.com/Mosai/workshop.git"
 workshop_directory=/tmp/mosai-workshop
 test_directory=tests
+script_dir=$(dirname "$0")
 
-export GITSUP_BASE_DIR="$(cd "$(dirname $0)";pwd)"
+GITSUP_BASE_DIR="$(cd "$script_dir" || exit 2;pwd)"
+export GITSUP_BASE_DIR
 
 if [ ! -d "${workshop_directory}" ]
 then

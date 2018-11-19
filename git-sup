@@ -2,7 +2,7 @@
 
 gitsup_config ()
 {
-	echo $(git config --get-all ${1:-})
+	git config --get-all "${1:-}"
 }
 
 gitsup_fetch_args ()
@@ -10,7 +10,7 @@ gitsup_fetch_args ()
 	default_args="--all"
 	user_args=$(gitsup_config sup.fetchargs)
 
-	echo ${user_args:-${default_args}}
+	echo "${user_args:-${default_args}}"
 }
 
 gitsup_ignored_remotes ()
@@ -22,7 +22,7 @@ gitsup_ignored_remotes ()
 		ignore_chain="${ignore_chain} | grep -v ${remote}"
 	done
 
-	echo $ignore_chain
+	echo "$ignore_chain"
 }
 
 gitsup_paths ()
@@ -33,10 +33,10 @@ gitsup_paths ()
 	find "${directory}" -name .git -depth ${depth} 2>/dev/null | sort
 }
 
-for path in $(gitsup_paths ${1:-})
+for path in $(gitsup_paths "${1:-}")
 do
-	cd "${path}/.."
+	cd "${path}/.." || exit 2
 	pwd
-	git fetch $(gitsup_fetch_args) $(gitsup_ignored_remotes) | sed "s/^/    /"
-	cd - 2>&1 > /dev/null
+	git fetch "$(gitsup_fetch_args)" "$(gitsup_ignored_remotes)" | sed "s/^/    /"
+	cd - > /dev/null 2>&1 || exit 2
 done
