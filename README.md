@@ -1,4 +1,5 @@
 # git-sup [![Build Status](https://travis-ci.org/augustohp/git-sup.svg)](https://travis-ci.org/augustohp/git-sup)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Faugustohp%2Fgit-sup.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Faugustohp%2Fgit-sup?ref=badge_shield)
 
 Have a directory with multiple Git repositories and want easily retrieve updates
 from different remotes? Ask git "Whats up!?"
@@ -44,3 +45,7 @@ You can use `.git/config` or `~/.gitconfig` to configure `git-sup`:
 Git configuration is respected. If you have a global configuration it is used
 when no local configuration is found. If you have an specific configuration for
 that repository, than the local configuration is preferred.
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Faugustohp%2Fgit-sup.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Faugustohp%2Fgit-sup?ref=badge_large)
