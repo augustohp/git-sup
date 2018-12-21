@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# vim: ft=sh:
+
+# Usage: list_docker_compose_files [pattern]
+list_docker_compose_files()
+{
+	pattern=${1:-"docker-compose.yml"}
+	find . -name "${pattern}" -type f
+}
+
+for file in $(list_docker_compose_files)
+do 
+	grep --after-context 1 --with-filename "ports:" $file \
+		| grep -v "ports:" \
+		| sed s/[^0-9:]//g \
+		| cut -d: -f 1 \
+		| awk "BEGIN{FILE=\"${file##./}\"; OFS=\"\t\"; FIELDWIDTHS=\"10 70\"}{ if (\$1!=\"\") {print \$1,FILE}}"
+done | sort -n | sed -r /^s*$/d
+
