@@ -1,19 +1,141 @@
 #!/usr/bin/env sh
-# vim: ft=sh:
+# vim: ft=sh noet ts=4 sw=4:
+#
+# Will report used ports on docker-compose.yml files
+# so one can easily find new ports or who is using 
+# duplicated ports. Usefull on the exploration of
+# company repositories.
+#
+# Author: Augusto Pascutti <augusto.hp@gmail.com>
 
-# Usage: list_docker_compose_files [pattern]
-list_docker_compose_files()
+APP_NAME=$(basename $0)
+APP_VERSION="1.0.0"
+OPTION_SEARCH_PATTERN="docker-compose.yml"
+OPTION_SEARCH_PATH="$(pwd)"
+
+test ! -z "$DEBUG" && { set -x; }
+
+display_help ()
 {
-	pattern=${1:-"docker-compose.yml"}
-	find . -name "${pattern}" -type f
+	cat <<-EOT
+	Usage: $APP_NAME
+	       $APP_NAME [-v | --version ]
+	       $APP_NAME [-h | --help ]
+	       $APP_NAME [-p <pattern> | --pattern <pattern>]
+	       $APP_NAME [-d <path> | --direcotry <path>]
+	
+	Report all ports mapped on ${OPTION_SEARCH_PATTERN} files
+	found inside current working directory.
+	
+	Options:
+	  -p <pattern>   Search pattern to find "docker-compose.yml"
+	                 files. Can be anything accepted by "find".
+	                 Default: ${OPTION_SEARCH_PATTERN}
+	  -d <path>      Directory where to perform the recursive
+	                 search of files. Defaults to the current
+	                 working directory.
+	
+	Send bugs or suggestions to augusto.hp@gmail.com
+	EOT
 }
 
-for file in $(list_docker_compose_files)
-do 
-	grep --after-context 1 --with-filename "ports:" $file \
-		| grep -v "ports:" \
-		| sed s/[^0-9:]//g \
-		| cut -d: -f 1 \
-		| awk "BEGIN{FILE=\"${file##./}\"; OFS=\"\t\"; FIELDWIDTHS=\"10 70\"}{ if (\$1!=\"\") {print \$1,FILE}}"
-done | sort -n | sed -r /^s*$/d
+# Usage: list_docker_compose_files
+list_docker_compose_files()
+{
+	find "${OPTION_SEARCH_PATH}" -name "${OPTION_SEARCH_PATTERN}" -type f
+}
 
+# TODO: Only the first port is being listed
+# Usage: list_ports_on_docker_compose_yaml <file>
+list_ports_on_docker_compose_yaml()
+{
+	grep --after-context 1 --with-filename "ports:" "${1}"
+}
+
+# Usage: ignore_ports_instruction
+ignore_ports_instruction()
+{
+	grep -v "ports:" 
+}
+
+# Usage: filter_port_mappings
+filter_port_mappings()
+{
+	sed "s/[^0-9:]//g"
+}
+
+# Usage: filter_host_port
+filter_host_port()
+{
+	cut -d: -f 1 
+}
+
+# Usage: ignore_lines_without_content
+ignore_lines_without_content()
+{
+	awk "{ if (\$1 != \"\") { print }}"
+}
+
+# Usage: format_filename_and_port <docker-compose.yml file path>
+format_filename_and_port()
+{
+	# Removes leading "./" on file
+	file="${1##./}" 
+	# Removes the file path we are searching on
+	file="${file##$OPTION_SEARCH_PATH/}"
+	awk "BEGIN{FILE=\"${file}\"; OFS=\"\t\"; FIELDWIDTHS=\"10 70\"}{ print \$1,FILE }"
+}
+
+# Usage: order_number_asc
+order_number_asc()
+{
+	sort -n
+}
+
+# Usage: main
+main()
+{
+	for file in $(list_docker_compose_files)
+	do 
+		list_ports_on_docker_compose_yaml "${file}" \
+			| ignore_ports_instruction \
+			| filter_port_mappings \
+			| filter_host_port \
+			| ignore_lines_without_content \
+			| format_filename_and_port "${file}"
+	done | order_number_asc 
+}
+
+while :;
+do
+	if [ $# = 0 ]
+	then
+		# No parameters given, run default
+		break
+	fi
+
+	case $1 in
+		-h|--help)
+			display_help
+			exit 0
+			;;
+		-p|--pattern)
+			OPTION_SEARCH_PATTERN="$2"
+			shift
+			;;
+		-d|--directory)
+			OPTION_SEARCH_PATH="$2"
+			shift
+			;;
+		-v|--version)
+			echo "$APP_NAME $APP_VERSION"
+			exit 0
+			;;
+		--)
+			break
+			;;
+	esac
+	shift
+done
+
+main
