@@ -25,7 +25,7 @@ echo "repository,age,first commit date,last_commit_date,number of authors,author
 for repository in $(ls)
 do
 	pushd "$repository" > /dev/null
-	age=$(ga-age)
+	age=$(repository_age)
 	first_commit=$(ga-birthday)
 	last_commit=$(ga-last_commit_date)
 	authors=$(ga-authors | sort | uniq | wc -l)
