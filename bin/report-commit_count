@@ -12,6 +12,8 @@ OPTION_HOWLONG="6 month ago"
 
 test ! -z "$DEBUG" && { set -x; }
 
+assert_dependency_exists git
+
 display_help()
 {
 	cat <<-EOT
