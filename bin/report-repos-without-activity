@@ -53,7 +53,7 @@ do
 	shift
 done
 
-for git_path in $(find . -name ".git" -type d)
+for git_path in $(for_every_dir_containing --pattern ".git" --command "pwd")
 do
 	repository="${git_path%%/.git}"
 	pushd "$repository" > /dev/null

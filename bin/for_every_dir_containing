@@ -1,0 +1,135 @@
+#!/usr/bin/env sh
+# vim: ft=sh noet ts=4 sw=4:
+#
+# Will execute commands inside every directory found
+# with a given pattern. You can execute "git fetch origin"
+# for every git repository for example.
+#
+# Author: Augusto Pascutti <augusto.hp@gmail.com>
+
+APP_NAME=$(basename $0)
+APP_VERSION="1.0.0"
+OPTION_PATTERN=".git"
+OPTION_PATH="$(pwd)"
+OPTION_DISPLAY_PATH="true"
+OPTION_COMMAND="pwd"
+
+set -e
+test ! -z "$DEBUG" && { set -x; }
+
+display_help ()
+{
+	cat <<-EOT
+	Usage: $APP_NAME
+	       $APP_NAME [-v | --version ]
+	       $APP_NAME [-h | --help ]
+	       $APP_NAME [-p <pattern> | --pattern <pattern>]
+	       $APP_NAME [-d <path> | --directory <path>]
+	       $APP_NAME [-s | --silent]
+	       $APP_NAME [-c <command> | --command <command>]
+	
+	Will execute a <command> inside the directory containing
+	a found pattern. If no option is passed, will print the
+	Git repositories found in the current path.
+
+	Examples
+	  Executes "git fetch" on every repository:
+	  $ $APP_NAME --pattern ".git" --command "git fetch origin"
+	
+	  You can omit the pattern ".git" as it is default, see the number of commits:
+	  $ $APP_NAME --command 'git log --oneline | wc -l'
+	
+	Options:
+	  -p <pattern>   Search pattern to find a directories Can
+	                 be anything accepted by "find".
+	                 Default: ${OPTION_PATTERN}
+	  -d <path>      Directory where to perform the recursive
+	                 search of files. Defaults to the current
+	                 working directory.
+	  -c <command>   Command(s) to execute inside the directory
+	                 where the given pattern is found.
+					 Default: ${OPTION_COMMAND}
+	  --silent       Will not display the path after the output
+	                 of the command provided.
+	
+	Send bugs or suggestions to augusto.hp@gmail.com
+	EOT
+}
+
+# Usage: find_pattern <inside path> <containing pattern>
+find_pattern()
+{
+	path="${1}"
+	pattern="${2}"
+
+	path="${path##./}" # removes leading ./
+	path="${path%%/}" # removes trailing /
+	find "${path}" -name "${pattern}"
+}
+
+# Usage: main <commands>
+main()
+{
+	display_suffix=""
+	for directory in $(find_pattern "${OPTION_PATH}" "${OPTION_PATTERN}")
+	do
+		previous_directory="$(pwd)"
+		parent_directory_of_pattern_found=$(dirname "${directory}")
+		cd "$parent_directory_of_pattern_found"
+		if [ "$OPTION_DISPLAY_PATH" = "true" ] && [ "$OPTION_COMMAND" != "pwd" ]
+		then
+			display_suffix="${parent_directory_of_pattern_found}"
+		fi
+		if output=$(sh -c "$OPTION_COMMAND")
+		then
+			IFS="\n"
+			for line in "$output"
+			do
+				echo "$line	$display_suffix"
+			done
+		else
+			exit_code=$?
+			exit $exit_code
+		fi
+		cd "${previous_directory}"
+	done
+}
+
+while :;
+do
+	if [ $# = 0 ]
+	then
+		break
+	fi
+
+	case $1 in
+		-h|--help)
+			display_help
+			exit 0
+			;;
+		-v|--version)
+			echo "$APP_NAME $APP_VERSION"
+			exit 0
+			;;
+		-d|--directory)
+			OPTION_PATH="$2"
+			shift
+			;;
+		-p|--pattern)
+			OPTION_PATTERN="$2"
+			shift
+			;;
+		-s|--silent)
+			OPTION_DISPLAY_PATH="false"
+			;;
+		-c|--command)
+			OPTION_COMMAND="${2}"
+			;;
+		--)
+			break
+			;;
+	esac
+	shift
+done
+
+main
