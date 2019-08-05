@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#vim: ft=sh noet ts=4 sw=4:
+#
+# Will display commit count for repositories found in the current directory.
+# Very useful while exploring repositories of a company.
+#
+# Author: Augusto Pascutti <augusto.hp@gmail.com>
+
+APP_NAME=$(basename $0)
+APP_VERSION="1.0.0"
+OPTION_HOWLONG="6 month ago"
+
+test ! -z "$DEBUG" && { set -x; }
+
+assert_dependency_exists git for_every_dir_containing
+
+display_help()
+{
+	cat <<-EOT
+	Usage: $APP_NAME
+	       $APP_NAME [-v | --version]
+	       $APP_NAME [-h | --help]
+	       $APP_NAME [-s <d> | --since <d>]
+	
+	Will print the amount of commits and a repository name, for a given period of
+	time.
+
+	Options
+	  -s <d>     Considers repository to be inactive if there are no commits
+	             since that period (Default: $OPTION_HOWLONG).
+
+	Send bugs or suggestions to augusto.hp@gmail.com
+	EOT
+}
+
+main()
+{
+	for_every_dir_containing \
+		--pattern ".git" \
+		--directory "$(pwd)" \
+		--command "git log --oneline --since '${OPTION_HOWLONG}' | wc -l"
+}
+
+while :;
+do
+	if [ $# = 0 ]
+	then
+		break
+	fi
+
+	case $1 in
+		-h|--help)
+			display_help
+			exit 0
+			;;
+		-s|--since)
+			OPTION_HOWLONG="$2"
+			shift
+			;;
+		-v|--version)
+			echo "$APP_NAME $APP_VERSION"
+			exit 0
+			;;
+		--)
+			break
+			;;
+	esac
+	shift
+done
+
+main

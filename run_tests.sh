@@ -16,4 +16,5 @@ fi
 export PATH="${PATH}:${workshop_directory}/bin"
 chmod a+x "${workshop_directory}/bin/posit"
 
+export GITSUP_TEST_EXECUTION=true
 posit --report=spec run "${test_directory}"

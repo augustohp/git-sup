@@ -1,42 +1,302 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
-gitsup_config ()
+set -e
+set -o posix
+test "${DEBUG:-0}" != "0" && set -x || set +x;
+
+# Option flags and their default values
+GITSUP_REPOSITORIES_DEPTH=2
+GITSUP_CONFIG_SECTION=sup
+GITSUP_DAYS_TO_BE_ACTIVE=${GITSUP_DAYS_TO_BE_ACTIVE:=30}
+GITSUP_LOG_FORMAT_AUTHORS=${GITSUP_LOG_FORMAT_AUTHORS:='%aN%x09<%aE>'}
+
+# Usage: _error "Some warning"
+_error () { echo "Error: $@" 1>&2; exit 2; }
+
+# Usage: _tab <command 1> [command 2] ...
+_tab () { $@ | sed "s/^/	/"; }
+
+# Usage: _verbose "A message thay may not appear"
+_verbose () { test -z "${VERBOSE:-""}" && return 0 || echo $@; }
+
+# Usage: _function_exists <name>
+_function_exists () { command -V "$1" 2> /dev/null | grep "function" || echo ""; }
+
+# Usage: _help <argument> <display help command to execute>
+_help ()
 {
-	echo $(git config --get-all ${1:-})
+	if [ "$1" == "--help" -o "$1" == "-h" ]
+	then
+		${@:2}
+		exit 0
+	else
+		return 0
+	fi
 }
 
-gitsup_fetch_args ()
+# Usage: _find_repositories <path> [depth]
+_find_repositories ()
 {
-	default_args="--all"
-	user_args=$(gitsup_config sup.fetchargs)
+	local directory="${1:-}"
+	local depth=${2:-$GITSUP_REPOSITORIES_DEPTH}
+	directory=${directory%%/}
 
-	echo ${user_args:-${default_args}}
-}
+	if [ -d "${directory}/.git" ]
+	then
+		echo "${directory}"
+		return 0
+	fi
 
-gitsup_ignored_remotes ()
-{
-	ignore_list=$(gitsup_config sup.ignoreremote)
-	ignore_chain=""
-	for remote in $ignore_list
+	for repo in $(find "${directory}" -name .git -type d -maxdepth ${depth} 2> /dev/null | sed 's#/\.git$##')
 	do
-		ignore_chain="${ignore_chain} | grep -v ${remote}"
+		realpath "${repo}"
 	done
-
-	echo $ignore_chain
 }
 
-gitsup_paths ()
+# Usage: _conf_or <git config key> <default value if none is given>
+_conf_or ()
 {
-	directory="${1:-}"
-	depth=2
+	local output
 
-	find "${directory}" -name .git -depth ${depth} 2>/dev/null | sort
+	output=$(git config --get-all ${1:-GITSUP_CONFIG_SECTION} 2>/dev/null)
+	if [ -z "${output}" ]
+	then
+		echo ${@:2} # everything but the first argument
+	else
+		echo ${output}
+	fi
 }
 
-for path in $(gitsup_paths ${1:-})
-do
-	cd "${path}/.."
-	pwd
-	git fetch $(gitsup_fetch_args) $(gitsup_ignored_remotes) | sed "s/^/    /"
-	cd - 2>&1 > /dev/null
-done
+# Dispatching "copied" from [scrito](https://gist.github.com/alganet/9419469)
+gitsup () ( - )
+
+# Making minimum options available
+gitsup_v () ( gitsup_version )
+gitsup_version () ( echo "git-sup 1.0.0" 1>&2 )
+
+gitsup_h () ( gitsup_help )
+gitsup_help ()
+{
+	cat <<-HELP
+	Usage: git-sup [options] <command> [command-options]
+	       git sup fetch .
+	       git sup fetch --help
+	
+	Allows one to query Git repositories about relevant information
+	regarding their repositories.
+
+	Options:
+	  -v, --version  Displays the version of the tool.
+	  -h, --help     Renders this message.
+	
+	Commands:
+	  fetch          Fetches updates from all remotes.
+	  authors        Lists authors and commiters.
+	  authors_active Authors who commited in a given time.
+	  changelog      Display short commit messages.
+	  uncommited     List repositories with pending changes.
+	  now            Updates repositories to origin/master.
+
+	Issues can be reported to augusto.hp [at] gmail [dot] com
+	HELP
+}
+
+gitsup_fetch ()
+{
+	local cwd # current working directory
+	cwd=${1:-.}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup fetch <path>
+
+	Will find every git repository in PATH and execute a "git fetch"
+	command in then.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Repository ${dir}"
+		pushd "${dir}" > /dev/null
+		_tab git fetch $(_conf_or sup.fetchargs "--all") 2> /dev/null
+		popd > /dev/null
+	done
+}
+
+gitsup_uncommited ()
+{
+	local cwd # current working directory
+	cwd=${1:-.}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup uncommited <path>
+
+	Displays the directory names of repositories with pending changes to
+	be commited.
+	Defaults to look just into the current branch of the repository.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Repository ${dir}"
+		pushd "${dir}" > /dev/null
+		if [ ! -z "$(git diff HEAD --name-only  2>/dev/null 2>&1)" ]
+		then
+			echo $dir
+		fi
+		popd > /dev/null
+	done
+}
+
+# TODO Use _conf_or
+gitsup_now ()
+{
+	local cwd # current working directory
+	local gitref
+	cwd=${1:-.}
+	gitref="origin/master"
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup now <path>
+
+	Stashes existing changes, fetches from origin remote, changes branch
+	to master, (hard) resets to origin/master and goes back to previous branch.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Repository ${dir}"
+		pushd "${dir}" > /dev/null
+		if [ -z "$(gitsup_uncommited)" ]
+		then
+			git add .
+			git stash save "git-sup update auto-stashed changes"
+			_tab _verbose "Stash created"
+		fi
+		gitsup_fetch
+		git reset --hard $gitref 2>&1 > /dev/null
+		popd > /dev/null
+	done
+}
+
+gitsup_changelog ()
+{
+	local cwd # current working directory
+	local branch
+	local changes
+	cwd=${1:-.}
+	branch=${2:-"master"}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup changelog <path> [branch]
+
+	Will output the short commit message of every Git repository found
+	inside PATH for the last $GITSUP_DAYS_TO_BE_ACTIVE days.  Defaults to master branch.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Repository ${dir}"
+		pushd "${dir}" > /dev/null
+		git checkout ${branch} > /dev/null 2> /dev/null
+		changes=$(git log --no-merges --oneline --since "$GITSUP_DAYS_TO_BE_ACTIVE days ago" 2> /dev/null)
+		if [ ! -z "$changes" ]
+		then
+			echo $dir
+			git log --no-merges --oneline --since "$GITSUP_DAYS_TO_BE_ACTIVE days ago" 2> /dev/null
+		fi
+		git checkout - 2> /dev/null > /dev/null
+		popd > /dev/null
+	done
+}
+
+gitsup_authors ()
+{
+	local cwd # where to execute the command into
+	local log_args # git-log arguments supplied
+	cwd=${1:-.}
+	log_args=${@:2}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup authors <path> [options]
+	       git-sup authors ~/src/github.com/php/php-src
+
+	Will output every author or commiter and their e-mail (respecting
+	.mailmap file) for every Git repository found in PATH.
+
+	An output line separated by tab contain the columns:
+	  E-mail: Author or commiter e-mail's on Git
+	  Name: Author or commiter name's on Git
+	
+	Options:
+	  -N              Display only N commits.
+	  --since <when>  Only commits after WHEN, e.g: 2 weeks ago.
+	  --follow <file> Continues to look the file history through its
+                      renames.
+	
+	Environment variables:
+	  GITSUP_LOG_FORMAT_AUTHORS=${GITSUP_LOG_FORMAT_AUTHORS}
+
+		
+	Any OPTIONS accepted by git-log also works.
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Repository ${dir}"
+		pushd "${dir}" > /dev/null
+		git log --format="$GITSUP_LOG_FORMAT_AUTHORS" ${log_args} 2> /dev/null | sort | uniq
+		popd > /dev/null
+	done
+}
+
+gitsup_authors_active ()
+{
+	local cwd # where to execute the command into
+	local log_args # git-log arguments supplied
+	cwd=${1:-.}
+	log_args=${@:2}
+
+	_help "${cwd}" cat <<-HELP
+	Usage: git-sup authors_active <path> [options]
+	       git-sup authors_active ~/src/github.com/php/php-src
+
+	Will output every author or commiter and their e-mail (respecting
+	.mailmap file) for every Git repository found in PATH. Only commits
+	of the last $GITSUP_DAYS_TO_BE_ACTIVE days are analysed.
+	
+	Environment variables:
+	  GITSUP_LOG_FORMAT_AUTHORS=${GITSUP_LOG_FORMAT_AUTHORS}
+	  GITSUP_DAYS_TO_BE_ACTIVE=${GITSUP_DAYS_TO_BE_ACTIVE}
+
+	HELP
+
+	for dir in $(_find_repositories $cwd)
+	do
+		_verbose "Repository ${dir}"
+		pushd "${dir}" > /dev/null
+		git log --format=${GITSUP_LOG_FORMAT_AUTHORS} --since "${GITSUP_DAYS_TO_BE_ACTIVE} days ago" 2> /dev/null | sort | uniq
+		popd > /dev/null
+	done
+}
+
+if [ ! -z $GITSUP_TEST_EXECUTION ]
+then
+	return 0
+fi
+
+tool=$1
+tool=${tool##*-}
+tool=${tool##*/}
+if [ -z "${tool}" ]
+then
+	_error "Specify a command. Use 'git-sup --help'."
+fi
+
+shift
+main_command_exists=$(_function_exists gitsup_${tool})
+if [ -z "$main_command_exists" ]
+then
+	_error "Invalid command 'git sup ${tool}'. Use 'git-sup --help'."
+fi
+
+gitsup_${tool} $@

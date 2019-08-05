@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+#vim: ft=sh noet:
+
+APP_PATH="${BASH_SOURCE[0]}"
+APP_VERSION="1.0.0"
+APP_NAME=$(basename "$APP_PATH")
+APP_DIR=$(dirname "$APP_PATH")
+OPTION_DIRECTORY=$(pwd)
+OPTION_COUNT=10
+
+source "$APP_DIR/.functions.sh"
+
+assert_dependency_exists find
+assert_dependency_exists awk
+assert_dependency_exists column
+
+command_help()
+{
+	cat <<-EOT
+	Usage: $APP_NAME
+	       $APP_NAME [-v | --version]
+	       $APP_NAME [-h | --help]
+	       $APP_NAME [-d <path> | --directory <path>]
+	       $APP_NAME [-c <int> | --count <int>]
+	
+	Will print repositories with feature detection for Docker functionalities.
+	Features detected are:
+
+	* Image building: The repository creates an image for itself
+	* Docker Compose: Supports development and connection to services
+	* Dockerfiles: How many Dockerfiles are there?
+
+	Options
+	  -d <path>  Where to find Git repositories?
+	             Default: ${OPTION_DIRECTORY}
+	  -c <int>   How many repositories to report?
+	             Default: ${OPTION_COUNT}
+
+	Send bugs or suggestions to augusto.hp@gmail.com
+	EOT
+}
+
+# Usage: count_file_presence <path> <search pattern>
+count_file_presence()
+{
+	path="${1%%/}"
+	pattern="${2}"
+	
+	find "${path}" -name "${pattern}" -type f | wc -l
+}
+
+# Usage: detect_image_building <path>
+detect_image_building()
+{
+	if [ 0 -lt $(count_file_presence "${1}" "Dockerfile") ]
+	then
+		echo "yes"
+	else
+		echo "no"
+	fi
+}
+
+# Usage: detect_docker_compose <path>
+detect_docker_compose()
+{
+	if [ 0 -lt $(count_file_presence "${1}" "docker-compose.yml") ]
+	then 
+		echo "yes"
+	else
+		echo "no"
+	fi
+}
+
+report_on_directory()
+{
+	path="$1"
+
+	if [ ! -d "$path" ]
+	then
+		echo "Error: '$path' is not a directory." >&2
+		exit 2
+	fi
+}
+
+# Usage: main
+main()
+{
+	echo "Repository	Dockerfile?	Compose?	How many images?"
+	for repository in $(report-most-active-repositories --directory "${OPTION_DIRECTORY}"| cut -f2 | head -n $OPTION_COUNT)
+	do 
+		pushd "$repository" > /dev/null
+		presence_dockerfile=$(detect_image_building "${repository}")
+		presence_compose=$(detect_docker_compose "${repository}")
+		count_dockerfiles=$(count_file_presence "${repository}" "Dockerfile")
+		echo "${repository}	${presence_dockerfile}	${presence_compose}	${count_dockerfiles}"
+		popd > /dev/null
+	done
+}
+
+while :;
+do
+	if [ $# = 0 ]
+	then
+		break
+	fi
+
+	case $1 in
+		-h|--help)
+			command_help
+			exit 0
+			;;
+		-v|--version)
+			echo "$APP_NAME $APP_VERSION"
+			exit 0
+			;;
+		-d|--directory)
+			OPTION_DIRECTORY="$2"
+			shift
+			;;
+		--)
+			break
+			;;
+	esac
+	shift
+done
+
+main | column -t

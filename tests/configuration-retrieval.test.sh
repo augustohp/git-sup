@@ -32,7 +32,7 @@ test_empty_file_yields_default_fetch_arguments ()
 	using_git_config empty
 
 	expected="--all"
-	result=$(gitsup_fetch_args)
+	result=$(_conf_or sup.fetchargs "--all")
 
 	[ "$expected" = "$result" ]
 }
@@ -42,37 +42,7 @@ test_fetch_arg_configuration_is_retrieved ()
 	using_git_config pruning
 
 	expected="--all --prune"
-	result=$(gitsup_fetch_args)
-
-	[ "$expected" = "$result" ]
-}
-
-test_empty_file_yields_empty_remote_ignore_list ()
-{
-	using_git_config empty
-
-	expected=""
-	result=$(gitsup_ignored_remotes)
-
-	[ "$expected" = "$result" ]
-}
-
-test_ignoring_one_remote ()
-{
-	using_git_config ignore-one-remote
-
-	expected="| grep -v one"
-	result=$(gitsup_ignored_remotes)
-
-	[ "$expected" = "$result" ]
-}
-
-test_ignoring_two_remotes ()
-{
-	using_git_config ignore-two-remotes
-
-	expected="| grep -v one | grep -v two"
-	result=$(gitsup_ignored_remotes)
+	result=$(_conf_or sup.fetchargs "failed")
 
 	[ "$expected" = "$result" ]
 }

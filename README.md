@@ -4,7 +4,7 @@ Have a directory with multiple Git repositories and want easily retrieve updates
 from different remotes? Ask git "Whats up!?"
 
 	$ cd ~/src/github.com/Respect
-	$ git sup .
+	$ git sup fetch .
 	/Users/apascutti/src/github.com/Respect/Rest
 		Fetching origin
 		c0c7022..a37067a  master     -> origin/master
@@ -38,8 +38,6 @@ You can use `.git/config` or `~/.gitconfig` to configure `git-sup`:
 
 	[sup]
 		fetchargs = --prune
-		ignoreremote = pull_requests
-		ignoreremote = live
 
 Git configuration is respected. If you have a global configuration it is used
 when no local configuration is found. If you have an specific configuration for

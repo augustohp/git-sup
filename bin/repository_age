@@ -1,0 +1,140 @@
+#!/usr/bin/env sh
+# vim: ft=sh noet ts=4 sw=4:
+#
+# Will display how many years old a repository is.
+# Useful for exploring repositories of a company.
+#
+# Author: Augusto Pascutti <augusto.hp@gmail.com>
+# TODO
+#
+# * [ ] Consider years with 366 days
+# * [x] Allows reporting using other units: month, days
+
+APP_NAME=$(basename $0)
+APP_VERSION="1.0.0"
+OPTION_UNIT="y"
+OPTION_REPOSITORY_PATH="$(pwd)"
+SECONDS_IN_DAY=86400
+SECONDS_IN_MONTH=$(($SECONDS_IN_DAY * 30))
+SECONDS_IN_YEAR=$(($SECONDS_IN_DAY * 365))
+
+set -e
+test ! -z "$DEBUG" && { set -x; }
+
+assert_dependency_exists git
+
+# Usage: display_help
+display_help()
+{
+	cat <<-EOT
+	Usage: $APP_NAME
+	       $APP_NAME [-h | --help]
+	       $APP_NAME [-v | --version]
+	       $APP_NAME [-u <d|m|y> | --unit <d|m|y>]
+	       $APP_NAME [-r <path> | --repository <path>]
+
+	Will display the age of the git repository in days, months
+	or years.
+
+	Options:
+	  --unit [d|m|y]       In which unit to display the age of
+	                       the repository: Days, Months or Years?
+	                       Default: $OPTION_UNIT	   
+	  --repository <path>  Which git repository to report? Defaults
+	                       to report the current directory.
+
+	Send bugs or suggestions to augusto.hp@gmail.com.
+	EOT
+}
+
+# Usage: display_age_in_seconds <repository path>
+display_age_in_seconds()
+{
+	repository_path="${1##./}"
+	repository_path="${repository_path%%/}"
+	if [ ! -d "$repository_path/.git" ]
+	then
+		echo "Error: Directory '${repository_path}' does not exist or is not a Git repository."
+		exit 2
+	fi
+
+	old_directory=$(pwd)
+	cd "${repository_path}"
+	first_commit_ts=$(git log --reverse --date=unix --format=%cd | head -n 1)
+	now_ts=$(date "+%s")
+	cd "${old_directory}"
+
+	if [ -z "$first_commit_ts" ]
+	then
+		# No commits, so the age is zero
+		echo 0
+		# Exits with error if the user cares
+		return 1
+	fi
+
+	echo $(($now_ts - $first_commit_ts))
+	return 0
+}
+
+# Usage: format_to_unit <seconds> <desired unit: d|m|y>
+format_to_unit()
+{
+	age_in_seconds=$1
+	desired_unit=$2
+	case "$desired_unit" in
+		"y"|"year"|"Y") denominator=$SECONDS_IN_YEAR ;;
+		"m"|"month"|"M") denominator=$SECONDS_IN_MONTH ;;
+		"d"|"day"|"D") denominator=$SECONDS_IN_DAY ;;
+		*) echo "Error: unrecognized unit '$desired_unit'"; exit 2 ;;
+	esac
+	
+	if [ $age_in_seconds -le $denominator ]
+	then
+		echo 0 # not old enough to be 1 unit old
+		return 0
+	fi
+
+	echo $(($age_in_seconds / $denominator))
+	return 0
+}
+
+# Usage: main
+main()
+{
+	age_in_seconds=$(display_age_in_seconds "${OPTION_REPOSITORY_PATH}")
+	echo $(format_to_unit $age_in_seconds $OPTION_UNIT)
+}
+
+while :;
+do
+	if [ $# = 0 ]
+	then
+		# No parameters given, run default
+		break
+	fi
+
+	case $1 in
+		-h|--help)
+			display_help
+			exit 0
+			;;
+		-r|--repository)
+			OPTION_REPOSITORY_PATH="$2"
+			shift
+			;;
+		-u|--unit)
+			OPTION_UNIT="$2"
+			shift
+			;;
+		-v|--version)
+			echo "$APP_NAME $APP_VERSION"
+			exit 0
+			;;
+		--)
+			break
+			;;
+	esac
+	shift
+done
+
+main
